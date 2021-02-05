@@ -54,6 +54,7 @@ public class MarioGame {
     //visualization
     private JFrame window = null;
     private MarioRender render = null;
+    private MarioChat chat = null;
     private MarioAgent agent = null;
     private MarioWorld world = null;
 
@@ -207,11 +208,16 @@ public class MarioGame {
         if (visuals) {
             this.window = new JFrame("Mario AI Framework");
             this.render = new MarioRender(scale);
-            this.window.setContentPane(this.render);
+			this.chat = new MarioChat(scale);
+            this.window.setLayout(new FlowLayout());
+            //this.window.setContentPane(this.render);
+            this.window.add(this.render);
+			this.window.add(this.chat);
             this.window.pack();
             this.window.setResizable(false);
             this.window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             this.render.init();
+            this.chat.init();
             this.window.setVisible(true);
         }
         this.setAgent(agent);
@@ -260,9 +266,13 @@ public class MarioGame {
                 // update world
                 this.world.update(actions);
                 gameEvents.addAll(this.world.lastFrameEvents);
-                agentEvents.add(new MarioAgentEvent(actions, this.world.mario.x,
-                        this.world.mario.y, (this.world.mario.isLarge ? 1 : 0) + (this.world.mario.isFire ? 1 : 0),
-                        this.world.mario.onGround, this.world.currentTick));
+				MarioAgentEvent agentEvent = new MarioAgentEvent(actions, this.world.mario.x, this.world.mario.y, 
+					(this.world.mario.isLarge ? 1 : 0) + (this.world.mario.isFire ? 1 : 0),
+					this.world.mario.onGround, this.world.currentTick);
+                agentEvents.add(agentEvent);
+						
+				//update chat
+				this.chat.chatWorker.AddNewEventsToFunnel(this.world.lastFrameEvents, agentEvent);
             }
 
             //render world
