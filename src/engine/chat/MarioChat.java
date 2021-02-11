@@ -1,7 +1,8 @@
-package engine.core;
+package engine.chat;
 
 import javax.swing.*;
 
+import engine.core.MarioGame;
 import engine.helper.Assets;
 import engine.helper.MarioActions;
 import engine.helper.EventType;
@@ -12,6 +13,9 @@ import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.util.ArrayList;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 public class MarioChat extends JComponent {
 	public MarioChatWorker chatWorker;
@@ -22,9 +26,12 @@ public class MarioChat extends JComponent {
 	
 	private javax.swing.JScrollPane scrollPane;
 	private static javax.swing.JTextArea textArea;
-	private javax.swing.JTextField txtInput;
+	public javax.swing.JTextField txtInput;
 	
-	public MarioChat(float scale) {
+	private MarioGame game;
+	
+	public MarioChat(MarioGame game, float scale) {
+		this.game = game;
 		this.setEnabled(true);
 		
 		Dimension size = new Dimension((int) chatWindowWidth, (int) (240 * scale));
@@ -83,57 +90,17 @@ public class MarioChat extends JComponent {
 		this.chatWorker.start();
 	}
 	
-	public void updateEventInformation(ArrayList<MarioEvent> lastMarioEvents, MarioAgentEvent marioAgentEvent) {
-		/*
-		MarioEvents contain the following event types:
-			BUMP(1),
-			STOMP_KILL(2),
-			FIRE_KILL(3),
-			SHELL_KILL(4),
-			FALL_KILL(5),
-			JUMP(6),
-			LAND(7),
-			COLLECT(8),
-			HURT(9),
-			KICK(10),
-			LOSE(11),
-			WIN(12);
-		They also contain an event parameter that can elaborate the event further...
-		*/
-		for(MarioEvent e : lastMarioEvents) {
-            if (e.getEventType() == EventType.COLLECT.getValue()) {
-                if (e.getEventParam() == SpriteType.FIRE_FLOWER.getValue()) {
-                    this.addMessageFromAgent("Got a fire flower!");
-                }
-                if (e.getEventParam() == SpriteType.MUSHROOM.getValue()) {
-                    this.addMessageFromAgent("Got a mushroom!");
-                }
-            }
-            if (e.getEventType() == EventType.BUMP.getValue() && e.getEventParam() == 22 //OBS_BRICK
-                    && e.getMarioState() > 0) {
-                this.addMessageFromAgent("Whoops!");
-            }
-        }
-		//MarioAgentEvent contains all the last actions done by the agent
-		var lastActions = marioAgentEvent.getActions();
-		if(lastActions[MarioActions.JUMP.getValue()]) {
-			this.addMessageFromAgent("Jump!");
-		} else {
-			//this.addMessageFromAgent("I'm in the air!");
-		}
-	}
-	
 	public void addMessageFromAgent(String message) {
 		this.addMessage("Mario: " + message);
 	}
 	
 	private void txtInputActionPerformed(java.awt.event.ActionEvent evt) {                                         
-		// TODO
 		var newMessage = txtInput.getText();
 		if(newMessage.isEmpty()) {
 			return;
 		}
 		this.addMessage("User: " + newMessage);
+		this.parseUserMessageToCommand(newMessage);
 		txtInput.setText("");
 	}
 	
@@ -143,4 +110,51 @@ public class MarioChat extends JComponent {
 		JScrollBar vertical = scrollPane.getVerticalScrollBar();
 		vertical.setValue( vertical.getMaximum() );
 	}
+	
+	private void parseUserMessageToCommand(String message) {
+		/**
+		 * TODO: do some actual parsing of the text and determine if it is a command or not.
+		 * Currently this method only deals with simple commands
+		 */
+		switch(message.toLowerCase()) {
+			case "stop":
+				this.game.newAgent = new agents.doNothing.Agent();
+				this.addMessageFromAgent("Okie dokie.");
+				break;
+			case "start":
+				this.game.newAgent = new agents.sergeyPolikarpov.Agent();
+				this.addMessageFromAgent("It's-a-me, Mario!");
+				break;
+			case "speedrun":
+				this.game.newAgent = new agents.robinBaumgarten.Agent();
+				this.addMessageFromAgent("Let's-a-go!");
+				break;
+			case "user":
+				this.game.newAgent = new agents.human.Agent();
+				txtInput.setFocusable(false); //TODO: How to return focus??
+				break;
+			//Hard-coded command(s) to make debugging easier
+			//TODO
+			//Currently things break when attempting to restart
+			case "reset": 
+			case "restart":
+				this.addMessage("User: " + message);
+				txtInput.setText("");
+				//this.chatWorker.interrupt();
+				//MarioGame newGame = new MarioGame();
+				//newGame.runGame(new agents.doNothing.Agent(), getLevel("../levels/original/lvl-1.txt"), 200, 0, true, false);
+				//this.game.runGame(new agents.doNothing.Agent(), getLevel("../levels/original/lvl-1.txt"), 200, 0, true, true);
+				//this.game.window.dispose();
+				break;
+		}
+	}
+	
+	public static String getLevel(String filepath) {
+        String content = "";
+        try {
+            content = new String(Files.readAllBytes(Paths.get(filepath)));
+        } catch (IOException e) {
+        }
+        return content;
+    }
 }

@@ -10,6 +10,10 @@ import javax.swing.JFrame;
 import agents.human.Agent;
 import engine.helper.GameStatus;
 import engine.helper.MarioActions;
+import engine.chat.MarioChat;
+
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowAdapter;
 
 public class MarioGame {
     /**
@@ -50,7 +54,9 @@ public class MarioGame {
      * events that kills the player when it happens only care about type and param
      */
     private MarioEvent[] killEvents;
-
+	
+	public MarioAgent newAgent = null;
+		
     //visualization
     private JFrame window = null;
     private MarioRender render = null;
@@ -85,6 +91,7 @@ public class MarioGame {
         this.agent = agent;
         if (agent instanceof KeyAdapter) {
             this.render.addKeyListener((KeyAdapter) this.agent);
+			this.render.setFocusable(true);
         }
     }
 
@@ -206,19 +213,19 @@ public class MarioGame {
      */
     public MarioResult runGame(MarioAgent agent, String level, int timer, int marioState, boolean visuals, int fps, float scale) {
         if (visuals) {
-            this.window = new JFrame("Mario AI Framework");
-            this.render = new MarioRender(scale);
-			this.chat = new MarioChat(scale);
-            this.window.setLayout(new FlowLayout());
-            //this.window.setContentPane(this.render);
-            this.window.add(this.render);
+			this.window = new JFrame("Mario AI Framework");
+			this.render = new MarioRender(scale);
+			this.chat = new MarioChat(this, scale);
+			this.window.setLayout(new FlowLayout());
+			//this.window.setContentPane(this.render);
+			this.window.add(this.render);
 			this.window.add(this.chat);
-            this.window.pack();
-            this.window.setResizable(false);
-            this.window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            this.render.init();
-            this.chat.init();
-            this.window.setVisible(true);
+			this.window.pack();
+			this.window.setResizable(false);
+			this.window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+			this.render.init();
+			this.chat.init();
+			this.window.setVisible(true);
         }
         this.setAgent(agent);
         return this.gameLoop(level, timer, marioState, visuals, fps);
@@ -271,8 +278,15 @@ public class MarioGame {
 					this.world.mario.onGround, this.world.currentTick);
                 agentEvents.add(agentEvent);
 						
-				//update chat
+				// update chat
 				this.chat.chatWorker.AddNewEventsToFunnel(this.world.lastFrameEvents, agentEvent);
+				
+				// update agent
+				if(this.newAgent != null) {
+					this.setAgent(this.newAgent);
+					this.newAgent = null;
+					this.agent.initialize(new MarioForwardModel(this.world.clone()), agentTimer);
+				}
             }
 
             //render world
@@ -289,6 +303,7 @@ public class MarioGame {
                 }
             }
         }
+		//TODO: Launch a new game if loss?
         return new MarioResult(this.world, gameEvents, agentEvents);
     }
 }
