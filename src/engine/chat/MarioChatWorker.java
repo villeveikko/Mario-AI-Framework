@@ -11,6 +11,8 @@ import engine.helper.SpriteType;
 import java.lang.Thread;
 import java.util.ArrayList;
 import java.util.Random;
+import java.util.TreeMap;
+import java.time.LocalTime;
 
 /**
  * Handles the transforming of the event data received from the game into proper sentences, and sends them 
@@ -25,11 +27,22 @@ public class MarioChatWorker extends Thread {
 	private ArrayList<MarioChatMessage> recentMessages = new ArrayList<MarioChatMessage>();
 	//Reference to chat
 	private MarioChat marioChat;
+	//Dictionary of all the past actions with context
+	private TreeMap<LocalTime, ArrayList<MarioChatMessage>> messageHistory = new TreeMap<LocalTime, ArrayList<MarioChatMessage>>();
 	//Arrays for randomized messages
-	private static final String[] JumpSounds = {
+	private static final String[] GenericJumpSounds = {
 		"Yahhoo!",
 		"Wahoo",
 		"Hop!"
+	};
+	private static final String[] CautionSounds = {
+		"That * is quite close...",
+		"Better watch out for that *!",
+		"Ugh, *s, am I right?"
+	};
+	private static final String[] CautionSoundsFlying = {
+		"When did *s grow wings?",
+		"Yikes, flying *s!"
 	};
 	private static final String[] StompSounds = {
 		"Coming through!",
@@ -45,23 +58,27 @@ public class MarioChatWorker extends Thread {
 	/**
 	 * Parses out a message from the game events, then sends it to the chat if a message of the same type 
 	 * has not been sent recently
+	 * 
+	 * @param lastMarioEvents		List of all MarioEvents that occurred in the last frame
+	 * @param marioAgentEvent		Tells what the agent did last frame
+	 * @param model					Used to determine blocks and sprites in vicinity
 	 */
-	public void AddNewEventsToFunnel(ArrayList<MarioEvent> lastMarioEvents, MarioAgentEvent marioAgentEvent) {
-		var marioEventMessages = this.TransformMarioEventsToMessages(lastMarioEvents);
-		var marioAgentMessages = this.TransformMarioAgentEventToMessages(marioAgentEvent);
-		for(MarioChatMessage m : marioEventMessages) {
-			if(IsMessageDuplicate(m, recentMessages)) {
-				continue;
-			}
-			this.marioChat.addMessageFromAgent(m.message);
-			recentMessages.add(m);
+	public void AddNewEventsToFunnel(ArrayList<MarioEvent> lastMarioEvents, MarioAgentEvent marioAgentEvent, MarioForwardModel model) {
+		var allMessages = new ArrayList<MarioChatMessage>();
+		allMessages.addAll(this.TransformMarioEventsToMessages(lastMarioEvents, model));
+		allMessages.addAll(this.TransformMarioAgentEventToMessages(marioAgentEvent, model));
+		allMessages.addAll(this.TransformForwardModelToObservations(model));
+		var localTime = java.time.LocalTime.now();
+		if(!messageHistory.containsKey(localTime)) {
+			messageHistory.put(localTime, new ArrayList<MarioChatMessage>());
 		}
-		for(MarioChatMessage m : marioAgentMessages) {
+		for(MarioChatMessage m : allMessages) {
 			if(IsMessageDuplicate(m, recentMessages)) {
 				continue;
 			}
 			this.marioChat.addMessageFromAgent(m.message);
 			recentMessages.add(m);
+			messageHistory.get(localTime).add(m);
 		}
 	}
 	
@@ -85,7 +102,7 @@ public class MarioChatWorker extends Thread {
 		}
 	}
 	
-	private ArrayList<MarioChatMessage> TransformMarioEventsToMessages(ArrayList<MarioEvent> marioEvents) {
+	private ArrayList<MarioChatMessage> TransformMarioEventsToMessages(ArrayList<MarioEvent> marioEvents, MarioForwardModel model) {
 		var result = new ArrayList<MarioChatMessage>();
 		for(MarioEvent e : marioEvents) {
 			String message = null;
@@ -157,17 +174,58 @@ public class MarioChatWorker extends Thread {
 					break;
 			}
 			if(message != null) {
-				result.add(new MarioChatMessage(type, message));
+				result.add(new MarioChatMessage(type, message, model));
 			}
         }
 		return result;
 	}
 	
-	private ArrayList<MarioChatMessage> TransformMarioAgentEventToMessages(MarioAgentEvent e) {
+	private ArrayList<MarioChatMessage> TransformMarioAgentEventToMessages(MarioAgentEvent e, MarioForwardModel model) {
 		var result = new ArrayList<MarioChatMessage>();
 		var lastActions = e.getActions();
 		if(lastActions[MarioActions.JUMP.getValue()]) {
-			result.add(new MarioChatMessage(EventType.JUMP, GetRandomMessage(JumpSounds, "")));
+			result.add(new MarioChatMessage(EventType.JUMP, GetRandomMessage(GenericJumpSounds, ""), model));
+		}
+		return result;		
+	}
+	
+	private ArrayList<MarioChatMessage> TransformForwardModelToObservations(MarioForwardModel model) {
+		var result = new ArrayList<MarioChatMessage>();
+		var completeObservation = model.getMarioCompleteObservation(0, 0);
+		//Check for holes on the right side of Mario
+		for(int i = completeObservation.length / 2 + 1; i < completeObservation.length / 1.3; i++) {
+			var holeFound = true;
+			for(int j = completeObservation[i].length / 2 + 1; j < completeObservation[i].length; j++) {
+				if(completeObservation[i][j] != MarioForwardModel.OBS_NONE) {
+					holeFound = false;
+					break;
+				}
+			}
+			if(holeFound) {
+				result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSounds, "Hole"), model));
+				break;
+			}
+		}
+		//Check the surroundings quite close to Mario
+		for(int i = completeObservation.length / 3; i < completeObservation.length / 1.3; i++) { //Outer array: left -> right?
+			for(int j = completeObservation[i].length / 3; j < completeObservation[i].length / 1.3; j++) { //Inner array: up -> down?
+				switch(completeObservation[i][j]) {
+					case MarioForwardModel.OBS_GOOMBA:
+						result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSounds, "Goomba"), model));
+						break;
+					case MarioForwardModel.OBS_RED_KOOPA:
+					case MarioForwardModel.OBS_GREEN_KOOPA:
+						result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSounds, "Koopa"), model));
+						break;
+					case MarioForwardModel.OBS_GOOMBA_WINGED:
+						result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSoundsFlying, "Goomba"), model));
+						break;
+					case MarioForwardModel.OBS_RED_KOOPA_WINGED:
+					case MarioForwardModel.OBS_GREEN_KOOPA_WINGED:
+						result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSoundsFlying, "Koopa"), model));
+						break;
+				}
+			}
 		}
 		return result;		
 	}

@@ -138,8 +138,8 @@ public class MarioChat extends JComponent {
 			//Currently things break when attempting to restart
 			case "reset": 
 			case "restart":
-				this.addMessage("User: " + message);
-				txtInput.setText("");
+				//this.addMessage("User: " + message);
+				//txtInput.setText("");
 				//this.chatWorker.interrupt();
 				//MarioGame newGame = new MarioGame();
 				//newGame.runGame(new agents.doNothing.Agent(), getLevel("../levels/original/lvl-1.txt"), 200, 0, true, false);
@@ -149,6 +149,7 @@ public class MarioChat extends JComponent {
 		}
 	}
 	
+	/*
 	public static String getLevel(String filepath) {
         String content = "";
         try {
@@ -157,4 +158,5 @@ public class MarioChat extends JComponent {
         }
         return content;
     }
+	*/
 }

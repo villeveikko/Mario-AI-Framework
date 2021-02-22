@@ -279,7 +279,7 @@ public class MarioGame {
                 agentEvents.add(agentEvent);
 						
 				// update chat
-				this.chat.chatWorker.AddNewEventsToFunnel(this.world.lastFrameEvents, agentEvent);
+				this.chat.chatWorker.AddNewEventsToFunnel(this.world.lastFrameEvents, agentEvent, new MarioForwardModel(this.world.clone()));
 				
 				// update agent
 				if(this.newAgent != null) {
