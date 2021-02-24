@@ -12,6 +12,7 @@ import java.lang.Thread;
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.Collections;
 import java.time.LocalTime;
 
 /**
@@ -68,6 +69,9 @@ public class MarioChatWorker extends Thread {
 		allMessages.addAll(this.TransformMarioEventsToMessages(lastMarioEvents, model));
 		allMessages.addAll(this.TransformMarioAgentEventToMessages(marioAgentEvent, model));
 		allMessages.addAll(this.TransformForwardModelToObservations(model));
+		if(allMessages.size() == 0) {
+			return;
+		}
 		var localTime = java.time.LocalTime.now();
 		if(!messageHistory.containsKey(localTime)) {
 			messageHistory.put(localTime, new ArrayList<MarioChatMessage>());
@@ -80,6 +84,37 @@ public class MarioChatWorker extends Thread {
 			recentMessages.add(m);
 			messageHistory.get(localTime).add(m);
 		}
+		if(messageHistory.get(localTime).isEmpty()) {
+			messageHistory.remove(localTime);
+		}
+	}
+	
+	/**
+	 * Looks into a past message of a given EventType and gives a reasoning for it
+	 *
+	 * @param type		The EventType that is looked for
+	 */
+	public void CheckHistoryForEventType(EventType type) {
+		if(messageHistory.isEmpty()) {
+			this.marioChat.addMessageFromAgent("Haven't done anything yet!");
+			return;
+		}
+		if(type == null) { //just repeats the last messages. For testing purposes
+			return;
+		}
+		var allKeys = new ArrayList<LocalTime>(messageHistory.keySet());
+		//Reverse order so that the latest messages will be looked up first
+		Collections.reverse(allKeys);
+		for(LocalTime key : allKeys) {
+			var messageList = messageHistory.get(key);
+			for(MarioChatMessage m : messageList) {
+				if(m.type == type) {
+					this.GiveIntrospectionForEvent(m, key);
+					return;
+				}
+			}
+		}
+		this.marioChat.addMessageFromAgent("Have I done something like that?");
 	}
 	
 	public void run() {
@@ -192,8 +227,8 @@ public class MarioChatWorker extends Thread {
 	private ArrayList<MarioChatMessage> TransformForwardModelToObservations(MarioForwardModel model) {
 		var result = new ArrayList<MarioChatMessage>();
 		var completeObservation = model.getMarioCompleteObservation(0, 0);
-		//Check for holes on the right side of Mario
-		for(int i = completeObservation.length / 2 + 1; i < completeObservation.length / 1.3; i++) {
+		//Check for holes on both sides of Mario
+		for(int i = completeObservation.length / 3; i < completeObservation.length / 1.3; i++) {
 			var holeFound = true;
 			for(int j = completeObservation[i].length / 2 + 1; j < completeObservation[i].length; j++) {
 				if(completeObservation[i][j] != MarioForwardModel.OBS_NONE) {
@@ -213,12 +248,12 @@ public class MarioChatWorker extends Thread {
 					case MarioForwardModel.OBS_GOOMBA:
 						result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSounds, "Goomba"), model));
 						break;
+					case MarioForwardModel.OBS_GOOMBA_WINGED:
+						result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSoundsFlying, "Goomba"), model));
+						break;
 					case MarioForwardModel.OBS_RED_KOOPA:
 					case MarioForwardModel.OBS_GREEN_KOOPA:
 						result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSounds, "Koopa"), model));
-						break;
-					case MarioForwardModel.OBS_GOOMBA_WINGED:
-						result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSoundsFlying, "Goomba"), model));
 						break;
 					case MarioForwardModel.OBS_RED_KOOPA_WINGED:
 					case MarioForwardModel.OBS_GREEN_KOOPA_WINGED:
@@ -228,6 +263,31 @@ public class MarioChatWorker extends Thread {
 			}
 		}
 		return result;		
+	}
+	
+	private void GiveIntrospectionForEvent(MarioChatMessage message, LocalTime timeStamp) {
+		/* Legend for the event types:
+				BUMP(1),
+				STOMP_KILL(2),
+				FIRE_KILL(3),
+				SHELL_KILL(4),
+				FALL_KILL(5),
+				JUMP(6),
+				LAND(7),
+				COLLECT(8),
+				HURT(9),
+				KICK(10),
+				LOSE(11),
+				WIN(12);
+			*/
+		switch(message.type.getValue()) {
+			case 6:
+				this.marioChat.addMessageFromAgent("Well I just felt like jumping... At " + timeStamp.toString());
+				break;
+			default:
+				this.marioChat.addMessageFromAgent("WIP");
+				break;
+		}
 	}
 	
 	private static boolean IsMessageDuplicate(MarioChatMessage message, ArrayList<MarioChatMessage> otherMessages) {

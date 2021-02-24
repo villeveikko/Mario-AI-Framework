@@ -9,6 +9,7 @@ public class MarioChatMessage {
 	public EventType type;
 	public String message;
 	public MarioForwardModel model;
+	// TODO: Some sort of weight
 	
 	public MarioChatMessage(EventType type, String message, MarioForwardModel model) {
 		this.type = type;

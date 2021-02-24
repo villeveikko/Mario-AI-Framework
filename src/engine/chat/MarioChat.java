@@ -147,6 +147,44 @@ public class MarioChat extends JComponent {
 				//this.game.window.dispose();
 				break;
 		}
+		if(message.toLowerCase().contains("why did you ")) {
+			var action = message.toLowerCase().substring(12); /*message.toLowerCase().indexOf("why did you ")*/
+			var eventType = StringToEventType(action.trim());
+			this.chatWorker.CheckHistoryForEventType(eventType);
+		}
+	}
+	
+	private static EventType StringToEventType(String s) {
+		// TODO: Add synonyms
+		System.out.println(s);
+		switch(s) {
+			case "bump":
+				return EventType.BUMP;
+			case "stomp":
+				return EventType.STOMP_KILL;
+			case "roast":
+				return EventType.FIRE_KILL;
+			case "shell":
+				return EventType.SHELL_KILL;
+			case "fall":
+				return EventType.FALL_KILL;
+			case "jump":
+				return EventType.JUMP;
+			case "land":
+				return EventType.LAND;
+			case "collect":
+				return EventType.COLLECT;
+			case "get hurt":
+				return EventType.HURT;
+			case "kick":
+				return EventType.KICK;
+			case "lose":
+				return EventType.LOSE;
+			case "win":
+				return EventType.WIN;
+			default:
+				return null;
+		}
 	}
 	
 	/*
