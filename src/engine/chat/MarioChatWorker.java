@@ -77,14 +77,15 @@ public class MarioChatWorker extends Thread {
 			messageHistory.put(localTime, new ArrayList<MarioChatMessage>());
 		}
 		for(MarioChatMessage m : allMessages) {
+			messageHistory.get(localTime).add(m); // Add "message" to history anyway; this can be important when checking history of actions
 			if(IsMessageDuplicate(m, recentMessages)) {
 				continue;
 			}
 			this.marioChat.addMessageFromAgent(m.message);
 			recentMessages.add(m);
-			messageHistory.get(localTime).add(m);
 		}
 		if(messageHistory.get(localTime).isEmpty()) {
+			// This should not happen anymore, but doesn't hurt to check
 			messageHistory.remove(localTime);
 		}
 	}
@@ -99,7 +100,7 @@ public class MarioChatWorker extends Thread {
 			this.marioChat.addMessageFromAgent("Haven't done anything yet!");
 			return;
 		}
-		if(type == null) { //just repeats the last messages. For testing purposes
+		if(type == null) {
 			return;
 		}
 		var allKeys = new ArrayList<LocalTime>(messageHistory.keySet());
@@ -282,12 +283,72 @@ public class MarioChatWorker extends Thread {
 			*/
 		switch(message.type.getValue()) {
 			case 6:
-				this.marioChat.addMessageFromAgent("Well I just felt like jumping... At " + timeStamp.toString());
+				var reason = this.CheckForDangersInFront(message.model);
+				if(reason == null) {
+					this.marioChat.addMessageFromAgent("Well I just felt like jumping... At " + timeStamp.toString());
+				} else {
+					this.marioChat.addMessageFromAgent(reason);
+				}
 				break;
 			default:
 				this.marioChat.addMessageFromAgent("WIP");
 				break;
 		}
+	}
+	
+	private String CheckForDangersInFront(MarioForwardModel model) {
+		var dangers = new ArrayList<String>();
+		var completeObservation = model.getMarioCompleteObservation(0, 0);
+		//Check for holes in front of Mario
+		for(int i = completeObservation.length / 2 + 1; i < completeObservation.length / 1; i++) {
+			var holeFound = true;
+			for(int j = completeObservation[i].length / 2 + 1; j < completeObservation[i].length; j++) {
+				if(completeObservation[i][j] != MarioForwardModel.OBS_NONE) {
+					holeFound = false;
+					break;
+				}
+			}
+			if(holeFound) {
+				dangers.add("a hole");
+				break;
+			}
+		}
+		//Check for enemies in front of Mario
+		for(int i = completeObservation.length / 2; i < completeObservation.length / 1.3; i++) { // Check from Mario's position to the right
+			for(int j = completeObservation[i].length / 3; j < completeObservation[i].length / 1.5; j++) { // Check just a little bit from above and below Mario
+				switch(completeObservation[i][j]) {
+					case MarioForwardModel.OBS_GOOMBA:
+						dangers.add("a goomba");
+						break;
+					case MarioForwardModel.OBS_GOOMBA_WINGED:
+						dangers.add("a flying goomba");
+						break;
+					case MarioForwardModel.OBS_RED_KOOPA:
+					case MarioForwardModel.OBS_GREEN_KOOPA:
+						dangers.add("a koopa");
+						break;
+					case MarioForwardModel.OBS_RED_KOOPA_WINGED:
+					case MarioForwardModel.OBS_GREEN_KOOPA_WINGED:
+						dangers.add("a flying koopa");
+						break;
+				}
+			}
+		}
+		if(dangers.size() == 0) {
+			return null;
+		}
+		var result = "Probably because there was ";
+		for(int i = 0; i < dangers.size(); i++) {
+			result += dangers.get(i);
+			if(i == dangers.size() - 1) {
+				continue;
+			} else if(i == dangers.size() - 2) {
+				result += " and ";
+			}
+			result += ", ";
+		}
+		result += " in my way...";
+		return result;
 	}
 	
 	private static boolean IsMessageDuplicate(MarioChatMessage message, ArrayList<MarioChatMessage> otherMessages) {

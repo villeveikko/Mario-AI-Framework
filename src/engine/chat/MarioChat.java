@@ -149,14 +149,23 @@ public class MarioChat extends JComponent {
 		}
 		if(message.toLowerCase().contains("why did you ")) {
 			var action = message.toLowerCase().substring(12); /*message.toLowerCase().indexOf("why did you ")*/
-			var eventType = StringToEventType(action.trim());
-			this.chatWorker.CheckHistoryForEventType(eventType);
+			var eventType = StringToEventType(CleanString(action));
+			if(eventType == null) {
+				this.addMessageFromAgent("Why did I what?");
+			} else {
+				this.chatWorker.CheckHistoryForEventType(eventType);
+			}
 		}
+	}
+	
+	private static String CleanString(String s) {
+		var result = s.replaceAll("[^a-zA-Z]", "");
+		result = result.trim();
+		return result;
 	}
 	
 	private static EventType StringToEventType(String s) {
 		// TODO: Add synonyms
-		System.out.println(s);
 		switch(s) {
 			case "bump":
 				return EventType.BUMP;
