@@ -14,6 +14,7 @@ import java.util.Random;
 import java.util.TreeMap;
 import java.util.Collections;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Handles the transforming of the event data received from the game into proper sentences, and sends them 
@@ -220,7 +221,9 @@ public class MarioChatWorker extends Thread {
 		var result = new ArrayList<MarioChatMessage>();
 		var lastActions = e.getActions();
 		if(lastActions[MarioActions.JUMP.getValue()]) {
-			result.add(new MarioChatMessage(EventType.JUMP, GetRandomMessage(GenericJumpSounds, ""), model));
+			if(IsMarioOnTheGround(model)) {
+				result.add(new MarioChatMessage(EventType.JUMP, GetRandomMessage(GenericJumpSounds, ""), model));
+			}
 		}
 		return result;		
 	}
@@ -245,6 +248,7 @@ public class MarioChatWorker extends Thread {
 		//Check the surroundings quite close to Mario
 		for(int i = completeObservation.length / 3; i < completeObservation.length / 1.3; i++) { //Outer array: left -> right?
 			for(int j = completeObservation[i].length / 3; j < completeObservation[i].length / 1.3; j++) { //Inner array: up -> down?
+				// BUG: Green koopa comes in with the value 2, and is registered as a goomba. Why?? 
 				switch(completeObservation[i][j]) {
 					case MarioForwardModel.OBS_GOOMBA:
 						result.add(new MarioChatMessage(EventType.CAUTION, GetRandomMessage(CautionSounds, "Goomba"), model));
@@ -283,9 +287,10 @@ public class MarioChatWorker extends Thread {
 			*/
 		switch(message.type.getValue()) {
 			case 6:
-				var reason = this.CheckForDangersInFront(message.model);
+				var reason = this.CheckForDangersInFront(message.model, timeStamp);
 				if(reason == null) {
-					this.marioChat.addMessageFromAgent("Well I just felt like jumping... At " + timeStamp.toString());
+					DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+					this.marioChat.addMessageFromAgent("Did you mean the last time, around " + timeStamp.format(formatter) + "? I'm not sure, now that I think about it...");
 				} else {
 					this.marioChat.addMessageFromAgent(reason);
 				}
@@ -296,14 +301,14 @@ public class MarioChatWorker extends Thread {
 		}
 	}
 	
-	private String CheckForDangersInFront(MarioForwardModel model) {
+	private String CheckForDangersInFront(MarioForwardModel model, LocalTime timeStamp) {
 		var dangers = new ArrayList<String>();
 		var completeObservation = model.getMarioCompleteObservation(0, 0);
 		//Check for holes in front of Mario
-		for(int i = completeObservation.length / 2 + 1; i < completeObservation.length / 1; i++) {
+		for(int i = completeObservation.length / 2 + 1; i < completeObservation.length; i++) {
 			var holeFound = true;
 			for(int j = completeObservation[i].length / 2 + 1; j < completeObservation[i].length; j++) {
-				if(completeObservation[i][j] != MarioForwardModel.OBS_NONE) {
+				if(completeObservation[i][j] != MarioForwardModel.OBS_NONE && completeObservation[i][j] != MarioForwardModel.OBS_COIN) {
 					holeFound = false;
 					break;
 				}
@@ -315,7 +320,7 @@ public class MarioChatWorker extends Thread {
 		}
 		//Check for enemies in front of Mario
 		for(int i = completeObservation.length / 2; i < completeObservation.length / 1.3; i++) { // Check from Mario's position to the right
-			for(int j = completeObservation[i].length / 3; j < completeObservation[i].length / 1.5; j++) { // Check just a little bit from above and below Mario
+			for(int j = completeObservation[i].length / 3; j < completeObservation[i].length / 1.3; j++) { // Check from above and below Mario
 				switch(completeObservation[i][j]) {
 					case MarioForwardModel.OBS_GOOMBA:
 						dangers.add("a goomba");
@@ -337,7 +342,8 @@ public class MarioChatWorker extends Thread {
 		if(dangers.size() == 0) {
 			return null;
 		}
-		var result = "Probably because there was ";
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+		var result = "Did you mean the last time, around " + timeStamp.format(formatter) + "? Probably because there was ";
 		for(int i = 0; i < dangers.size(); i++) {
 			result += dangers.get(i);
 			if(i == dangers.size() - 1) {
@@ -347,8 +353,22 @@ public class MarioChatWorker extends Thread {
 			}
 			result += ", ";
 		}
-		result += " in my way...";
+		result += " in my way.";
 		return result;
+	}
+	
+	/**
+	 * Checks if Mario is on the ground currently
+	 * 
+	 * @param model		The current forward model
+	 *
+	 * @return true if there is a walkable tile right below Mario, false otherwise.
+	 */
+	private static boolean IsMarioOnTheGround(MarioForwardModel model) {
+		var sceneObservation = model.getMarioSceneObservation();
+		var halfwayIndex = sceneObservation.length / 2;
+		var tileBelowMario = sceneObservation[halfwayIndex][sceneObservation[halfwayIndex].length / 2 + 1];
+		return tileBelowMario != MarioForwardModel.OBS_NONE && tileBelowMario != MarioForwardModel.OBS_COIN;
 	}
 	
 	private static boolean IsMessageDuplicate(MarioChatMessage message, ArrayList<MarioChatMessage> otherMessages) {

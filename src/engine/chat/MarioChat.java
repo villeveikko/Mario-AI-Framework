@@ -12,6 +12,8 @@ import java.awt.*;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.util.ArrayList;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -55,6 +57,7 @@ public class MarioChat extends JComponent {
 		textArea.setColumns(0);
 		textArea.setRows(0);
 		textArea.setText("Welcome to the Chat Room with Mario. Say hi!\n");
+		textArea.setLineWrap(true);
 		textArea.setWrapStyleWord(true);
 		textArea.setCaretPosition(textArea.getDocument().getLength());
 		scrollPane.setViewportView(textArea);
@@ -105,7 +108,9 @@ public class MarioChat extends JComponent {
 	}
 	
 	private void addMessage(String message) {
-		textArea.append("\n" + message);
+		var timeStamp = java.time.LocalTime.now();
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+		textArea.append("\n" + timeStamp.format(formatter) + " - " + message);
 		this.validate();
 		JScrollBar vertical = scrollPane.getVerticalScrollBar();
 		vertical.setValue( vertical.getMaximum() );
