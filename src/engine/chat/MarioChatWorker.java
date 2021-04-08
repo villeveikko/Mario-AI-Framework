@@ -96,27 +96,85 @@ public class MarioChatWorker extends Thread {
 	 *
 	 * @param type		The EventType that is looked for
 	 */
-	public void CheckHistoryForEventType(EventType type) {
+	public MarioLogMessage CheckHistoryForEventType(EventType type, LocalTime timeStamp) {
 		if(messageHistory.isEmpty()) {
-			this.marioChat.addMessageFromAgent("Haven't done anything yet!");
-			return;
+			return new MarioLogMessage(type, "Haven't done anything yet!", java.time.LocalTime.now());
 		}
-		if(type == null) {
-			return;
+		var allKeys = new ArrayList<LocalTime>(messageHistory.keySet());
+		//Reverse order so that the latest messages will be looked up first
+		Collections.reverse(allKeys);
+		if(timeStamp != null) {
+			var higherKey = messageHistory.higherKey(timeStamp);
+			/*var lowerKey = allKeys.lowerKey(timeStamp);
+			var higherDifference = timeStamp.compareTo(higherKey);
+			var lowerDifference = timeStamp.compareTo(lowerKey) * -1;
+			if(higherDifference > lowerDifference) {
+				
+			}*/
+			while(higherKey != null) {
+				var messageList = messageHistory.get(higherKey);
+				for(MarioChatMessage m : messageList) {
+					if(m.type == type) {
+						return new MarioLogMessage(type, this.GiveIntrospectionForEvent(m, higherKey), higherKey);
+					}
+				}
+				higherKey = messageHistory.higherKey(higherKey);
+			}
+			return new MarioLogMessage(type, "I cannot find an event for that type with that time stamp.", java.time.LocalTime.now()); 
+		}
+		for(LocalTime key : allKeys) {
+			var messageList = messageHistory.get(key);
+			for(MarioChatMessage m : messageList) {
+				if(m.type == type) {
+					return new MarioLogMessage(type, this.GiveIntrospectionForEvent(m, key), key);
+				}
+			}
+		}
+		return new MarioLogMessage(type, "Have I done something like that?", java.time.LocalTime.now());
+	}
+	
+	public MarioLogMessage CheckEarlierHistoryForEventType(EventType type, LocalTime lastEventTimeStamp) {
+		if(messageHistory.isEmpty()) {
+			return new MarioLogMessage(type, "Haven't done anything yet!", java.time.LocalTime.now());
 		}
 		var allKeys = new ArrayList<LocalTime>(messageHistory.keySet());
 		//Reverse order so that the latest messages will be looked up first
 		Collections.reverse(allKeys);
 		for(LocalTime key : allKeys) {
+			// If event is newer than the last one, skip
+			if(key.compareTo(lastEventTimeStamp) >= 0) {
+				continue;
+			}
 			var messageList = messageHistory.get(key);
 			for(MarioChatMessage m : messageList) {
 				if(m.type == type) {
-					this.GiveIntrospectionForEvent(m, key);
-					return;
+					return new MarioLogMessage(type, this.GiveIntrospectionForEvent(m, key), key);
 				}
 			}
 		}
-		this.marioChat.addMessageFromAgent("Have I done something like that?");
+		return new MarioLogMessage(type, "I don't recall jumping earlier...", java.time.LocalTime.now()); //TODO: replace "jumping" with event type
+	}
+	
+	public MarioLogMessage CheckLaterHistoryForEventType(EventType type, LocalTime lastEventTimeStamp) {
+		if(messageHistory.isEmpty()) {
+			return new MarioLogMessage(type, "Haven't done anything yet!", java.time.LocalTime.now());
+		}
+		var allKeys = new ArrayList<LocalTime>(messageHistory.keySet());
+		//No reverse order so that the earliest messages will be looked up first
+		//Collections.reverse(allKeys);
+		for(LocalTime key : allKeys) {
+			// If event is older than the last one, skip
+			if(key.compareTo(lastEventTimeStamp) <= 0) {
+				continue;
+			}
+			var messageList = messageHistory.get(key);
+			for(MarioChatMessage m : messageList) {
+				if(m.type == type) {
+					return new MarioLogMessage(type, this.GiveIntrospectionForEvent(m, key), key);
+				}
+			}
+		}
+		return new MarioLogMessage(type, "I don't recall jumping later...", java.time.LocalTime.now()); //TODO: replace "jumping" with event type
 	}
 	
 	public void run() {
@@ -192,6 +250,10 @@ public class MarioChatWorker extends Thread {
 					message = "Strike!";
 					type = EventType.SHELL_KILL;
 					break;
+				case 6: // jump
+					message = GetRandomMessage(GenericJumpSounds, "");
+					type = EventType.JUMP;
+					break;
 				case 8: // collect
 					if (e.getEventParam() == SpriteType.FIRE_FLOWER.getValue()) {
 						message = "Got a fire flower!";
@@ -220,11 +282,7 @@ public class MarioChatWorker extends Thread {
 	private ArrayList<MarioChatMessage> TransformMarioAgentEventToMessages(MarioAgentEvent e, MarioForwardModel model) {
 		var result = new ArrayList<MarioChatMessage>();
 		var lastActions = e.getActions();
-		if(lastActions[MarioActions.JUMP.getValue()]) {
-			if(IsMarioOnTheGround(model)) {
-				result.add(new MarioChatMessage(EventType.JUMP, GetRandomMessage(GenericJumpSounds, ""), model));
-			}
-		}
+		// No need for these events, for now
 		return result;		
 	}
 	
@@ -270,7 +328,7 @@ public class MarioChatWorker extends Thread {
 		return result;		
 	}
 	
-	private void GiveIntrospectionForEvent(MarioChatMessage message, LocalTime timeStamp) {
+	private String GiveIntrospectionForEvent(MarioChatMessage message, LocalTime timeStamp) {
 		/* Legend for the event types:
 				BUMP(1),
 				STOMP_KILL(2),
@@ -290,14 +348,12 @@ public class MarioChatWorker extends Thread {
 				var reason = this.CheckForDangersInFront(message.model, timeStamp);
 				if(reason == null) {
 					DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-					this.marioChat.addMessageFromAgent("Did you mean the last time, around " + timeStamp.format(formatter) + "? I'm not sure, now that I think about it...");
+					return ("Did you mean the last time, around " + timeStamp.format(formatter) + "? I'm not sure, now that I think about it...");
 				} else {
-					this.marioChat.addMessageFromAgent(reason);
+					return reason;
 				}
-				break;
 			default:
-				this.marioChat.addMessageFromAgent("WIP");
-				break;
+				return null;
 		}
 	}
 	

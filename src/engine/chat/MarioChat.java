@@ -12,6 +12,8 @@ import java.awt.*;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.util.ArrayList;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
@@ -19,18 +21,29 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
-public class MarioChat extends JComponent {
-	public MarioChatWorker chatWorker;
-	
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyleContext;
+import javax.swing.text.DefaultCaret;
+
+public class MarioChat extends JComponent {	
 	private GraphicsConfiguration graphicsConfiguration;
+
+	private MarioLogMessage lastMessage = null;
 	
-	private static final int chatWindowWidth = 400;
-	
-	private javax.swing.JScrollPane scrollPane;
-	private static javax.swing.JTextArea textArea;
-	public javax.swing.JTextField txtInput;
+	private JScrollPane scrollPane;
+	private JTextPane tPane;
+	public JTextField txtInput;
 	
 	private MarioGame game;
+	public MarioChatWorker chatWorker;
+	
+	private static final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
+	private static final int chatWindowWidth = 400;
+	private static final Pattern dateTimePattern = Pattern.compile("\\d\\d:\\d\\d:\\d\\d");
 	
 	public MarioChat(MarioGame game, float scale) {
 		this.game = game;
@@ -49,18 +62,25 @@ public class MarioChat extends JComponent {
         Assets.init(graphicsConfiguration);
 		
 		//Create chat graphics
-		scrollPane = new javax.swing.JScrollPane();
-		textArea = new javax.swing.JTextArea();
-		txtInput = new javax.swing.JTextField();
-	
-		textArea.setEditable(false);
-		textArea.setColumns(0);
-		textArea.setRows(0);
-		textArea.setText("Welcome to the Chat Room with Mario. Say hi!\n");
-		textArea.setLineWrap(true);
-		textArea.setWrapStyleWord(true);
-		textArea.setCaretPosition(textArea.getDocument().getLength());
-		scrollPane.setViewportView(textArea);
+		scrollPane = new JScrollPane();
+		txtInput = new JTextField();
+        tPane = new JTextPane();                
+		DefaultCaret caret = (DefaultCaret)tPane.getCaret();
+		caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
+		
+		scrollPane.setViewportView(tPane);
+		
+		this.addMessage("Welcome to chat with Mario. The following commands are available:\n" +
+		"start\n" +
+		"stop\n" +
+		"speedrun\n" +
+		"user\n" +
+		"why did you <action>?\n" +
+		"earlier\n" +
+		"later\n" +
+		"at <HH:mm:ss>\n"
+		, Color.GRAY);
+		
 		txtInput.setToolTipText("Type anything...");
 		txtInput.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent evt) {
@@ -94,7 +114,7 @@ public class MarioChat extends JComponent {
 	}
 	
 	public void addMessageFromAgent(String message) {
-		this.addMessage("Mario: " + message);
+		this.addMessage("Mario: " + message, Color.BLUE);
 	}
 	
 	private void txtInputActionPerformed(java.awt.event.ActionEvent evt) {                                         
@@ -102,18 +122,34 @@ public class MarioChat extends JComponent {
 		if(newMessage.isEmpty()) {
 			return;
 		}
-		this.addMessage("User: " + newMessage);
+		this.addMessage("User: " + newMessage, Color.BLACK);
 		this.parseUserMessageToCommand(newMessage);
 		txtInput.setText("");
 	}
 	
-	private void addMessage(String message) {
+	private void addMessageWithTimeStamp(String message, Color color) {
 		var timeStamp = java.time.LocalTime.now();
 		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-		textArea.append("\n" + timeStamp.format(formatter) + " - " + message);
-		this.validate();
-		JScrollBar vertical = scrollPane.getVerticalScrollBar();
-		vertical.setValue( vertical.getMaximum() );
+		var fullMessage = "\n" + timeStamp.format(formatter) + " - " + message;
+		this.addMessage(fullMessage, color);
+	}
+	
+	//TODO: Change most addMessage calls to addMessageWithTimeStamp. Remove the time stamp insert from addMessage
+	private void addMessage(String message, Color color) {
+		var timeStamp = java.time.LocalTime.now();
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+		var fullMessage = "\n" + timeStamp.format(formatter) + " - " + message;
+		
+		StyleContext sc = StyleContext.getDefaultStyleContext();
+        AttributeSet aset = sc.addAttribute(SimpleAttributeSet.EMPTY, StyleConstants.Foreground, color);
+
+        aset = sc.addAttribute(aset, StyleConstants.FontFamily, "Lucida Console");
+        aset = sc.addAttribute(aset, StyleConstants.Alignment, StyleConstants.ALIGN_LEFT);
+
+        int len = tPane.getDocument().getLength();
+        tPane.setCaretPosition(len);
+        tPane.setCharacterAttributes(aset, false);
+        tPane.replaceSelection(fullMessage);
 	}
 	
 	private void parseUserMessageToCommand(String message) {
@@ -121,9 +157,9 @@ public class MarioChat extends JComponent {
 		 * TODO: do some actual parsing of the text and determine if it is a command or not.
 		 * Currently this method only deals with simple commands
 		 */
-		switch(message.toLowerCase()) {
+		switch(CleanString(message)) {
 			case "stop":
-				this.game.newAgent = new agents.doNothing.Agent();
+				this.game.newAgent = new agents.cautiousIdle.Agent();
 				this.addMessageFromAgent("Okie dokie.");
 				break;
 			case "start":
@@ -153,20 +189,43 @@ public class MarioChat extends JComponent {
 				break;
 		}
 		if(message.toLowerCase().contains("why did you ")) {
-			var action = message.toLowerCase().substring(12); /*message.toLowerCase().indexOf("why did you ")*/
+			var action = message.toLowerCase().substring(12);
+			var timeStampIndex = action.indexOf(" at ");
+			LocalTime timeStamp = null;
+			if(timeStampIndex > -1) {
+				var timeStampString = action.substring(timeStampIndex + 4, timeStampIndex + 4 + 8);
+				timeStamp = LocalTime.parse(timeStampString, dtf);
+				action = action.substring(0, timeStampIndex);
+			}
 			var eventType = StringToEventType(CleanString(action));
 			if(eventType == null) {
 				this.addMessageFromAgent("Why did I what?");
 			} else {
-				this.chatWorker.CheckHistoryForEventType(eventType);
+				this.lastMessage = this.chatWorker.CheckHistoryForEventType(eventType, timeStamp);
+				this.addMessageFromAgent(this.lastMessage.message);
+			}
+		}
+		if(this.lastMessage != null) {
+			if(message.toLowerCase().contains("earlier")) {
+				this.lastMessage = this.chatWorker.CheckEarlierHistoryForEventType(this.lastMessage.type, this.lastMessage.timeStamp);
+				this.addMessageFromAgent(this.lastMessage.message);
+			}
+			if(message.toLowerCase().contains("later")) {
+				this.lastMessage = this.chatWorker.CheckLaterHistoryForEventType(this.lastMessage.type, this.lastMessage.timeStamp);
+				this.addMessageFromAgent(this.lastMessage.message);
+			}
+			Matcher m = dateTimePattern.matcher(message);
+			if(m.matches()) {
+				var timeStampString = m.group();
+				System.out.println(timeStampString);
 			}
 		}
 	}
 	
 	private static String CleanString(String s) {
-		var result = s.replaceAll("[^a-zA-Z]", "");
+		var result = s.replaceAll("[^a-zA-Z\\s]", "");
 		result = result.trim();
-		return result;
+		return result.toLowerCase();
 	}
 	
 	private static EventType StringToEventType(String s) {
@@ -183,6 +242,7 @@ public class MarioChat extends JComponent {
 			case "fall":
 				return EventType.FALL_KILL;
 			case "jump":
+			case "jump up":
 				return EventType.JUMP;
 			case "land":
 				return EventType.LAND;
